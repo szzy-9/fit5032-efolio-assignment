@@ -7,20 +7,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules/
+node_modules
 .DS_Store
-dist/
+dist
 dist-ssr
 coverage
 *.local
 
-# Environment files
-.env
-.env.*
-
 # Editor directories and files
-**/.vscode/*
-!**/.vscode/extensions.json
+.vscode/*
+!.vscode/extensions.json
 .idea
 *.suo
 *.ntvs*
@@ -40,5 +36,4 @@ coverage
 __screenshots__/
 
 # Vite
-.vite/
 *.timestamp-*-*.mjs
