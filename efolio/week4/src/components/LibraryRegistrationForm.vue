@@ -146,6 +146,10 @@ const validateName = (blur) => {
     if (blur) {
       errors.value.username = 'Name must be at least 3 characters'
     }
+  } else if (!/^[A-Za-z0-9_]+$/.test(formData.value.username)) {
+    if (blur) {
+      errors.value.username = 'Username can only contain letters, numbers and underscores.'
+    }
   } else {
     errors.value.username = null
   }
@@ -197,9 +201,15 @@ const validateGender = (blur) => {
 }
 
 const validateReason = (blur) => {
-  if (!formData.value.reason.trim()) {
+  const reason = formData.value.reason.trim()
+
+  if (!reason) {
     if (blur) {
       errors.value.reason = 'Please provide a reason for joining.'
+    }
+  } else if (reason.length < 10) {
+    if (blur) {
+      errors.value.reason = 'Reason must be at least 10 characters.'
     }
   } else {
     errors.value.reason = null
