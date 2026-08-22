@@ -115,6 +115,18 @@
             </ul>
           </div>
         </div>
+
+        <DataTable v-if="submittedCards.length" :value="submittedCards" class="mt-4">
+          <Column field="username" header="Username" />
+          <Column field="password" header="Password" />
+          <Column header="Australian Resident">
+            <template #body="{ data }">
+              {{ data.isAustralian ? 'Yes' : 'No' }}
+            </template>
+          </Column>
+          <Column field="gender" header="Gender" />
+          <Column field="reason" header="Reason" />
+        </DataTable>
       </div>
     </div>
   </div>
@@ -122,6 +134,8 @@
 
 <script setup>
 import { ref } from 'vue'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
 
 const formData = ref({
   username: '',
