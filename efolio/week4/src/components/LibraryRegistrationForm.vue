@@ -14,8 +14,10 @@
                 type="text"
                 name="username"
                 class="form-control"
-                required
+                @blur="() => validateName(true)"
+                @input="() => validateName(false)"
               >
+              <div v-if="errors.username" class="text-danger">{{ errors.username }}</div>
             </div>
 
             <div class="col-sm-6 mb-3">
@@ -26,10 +28,10 @@
                 type="password"
                 name="password"
                 class="form-control"
-                required
-                minlength="4"
-                maxlength="10"
+                @blur="() => validatePassword(true)"
+                @input="() => validatePassword(false)"
               >
+              <div v-if="errors.password" class="text-danger">{{ errors.password }}</div>
             </div>
           </div>
 
@@ -42,20 +44,29 @@
                   type="checkbox"
                   name="isAustralian"
                   class="form-check-input"
+                  @change="() => validateResident(true)"
                 >
                 <label for="isAustralian" class="form-check-label">
                   Australian Resident?
                 </label>
               </div>
+              <div v-if="errors.resident" class="text-danger">{{ errors.resident }}</div>
             </div>
 
             <div class="col-sm-6 mb-3">
               <label for="gender" class="form-label">Gender</label>
-              <select id="gender" v-model="formData.gender" class="form-select" required>
+              <select
+                id="gender"
+                v-model="formData.gender"
+                class="form-select"
+                @blur="() => validateGender(true)"
+                @change="() => validateGender(false)"
+              >
                 <option value="female">Female</option>
                 <option value="male">Male</option>
                 <option value="other">Other</option>
               </select>
+              <div v-if="errors.gender" class="text-danger">{{ errors.gender }}</div>
             </div>
           </div>
 
@@ -67,8 +78,10 @@
               name="reason"
               class="form-control"
               rows="3"
-              required
+              @blur="() => validateReason(true)"
+              @input="() => validateReason(false)"
             ></textarea>
+            <div v-if="errors.reason" class="text-danger">{{ errors.reason }}</div>
           </div>
 
           <div class="text-center">
@@ -120,10 +133,93 @@ const formData = ref({
 
 const submittedCards = ref([])
 
+const errors = ref({
+  username: null,
+  password: null,
+  resident: null,
+  gender: null,
+  reason: null
+})
+
+const validateName = (blur) => {
+  if (formData.value.username.length < 3) {
+    if (blur) {
+      errors.value.username = 'Name must be at least 3 characters'
+    }
+  } else {
+    errors.value.username = null
+  }
+}
+
+const validatePassword = (blur) => {
+  const password = formData.value.password
+  let error = null
+
+  if (password.length < 8) {
+    error = 'Password must be at least 8 characters'
+  } else if (!/[A-Z]/.test(password)) {
+    error = 'Password must contain at least one uppercase letter'
+  } else if (!/[a-z]/.test(password)) {
+    error = 'Password must contain at least one lowercase letter'
+  } else if (!/\d/.test(password)) {
+    error = 'Password must contain at least one number'
+  } else if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    error = 'Password must contain at least one special character'
+  }
+
+  if (error) {
+    if (blur) {
+      errors.value.password = error
+    }
+  } else {
+    errors.value.password = null
+  }
+}
+
+const validateResident = (blur) => {
+  if (!formData.value.isAustralian) {
+    if (blur) {
+      errors.value.resident = 'You must be an Australian resident to register.'
+    }
+  } else {
+    errors.value.resident = null
+  }
+}
+
+const validateGender = (blur) => {
+  if (!formData.value.gender) {
+    if (blur) {
+      errors.value.gender = 'Please select a gender.'
+    }
+  } else {
+    errors.value.gender = null
+  }
+}
+
+const validateReason = (blur) => {
+  if (!formData.value.reason.trim()) {
+    if (blur) {
+      errors.value.reason = 'Please provide a reason for joining.'
+    }
+  } else {
+    errors.value.reason = null
+  }
+}
+
 const submitForm = () => {
-  submittedCards.value.push({
-    ...formData.value
-  })
+  validateName(true)
+  validatePassword(true)
+  validateResident(true)
+  validateGender(true)
+  validateReason(true)
+
+  const isValid = Object.values(errors.value).every((error) => error === null)
+
+  if (isValid) {
+    submittedCards.value.push({
+      ...formData.value
+    })
+  }
 }
 
 const clearForm = () => {
