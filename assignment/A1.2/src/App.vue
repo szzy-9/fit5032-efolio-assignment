@@ -3,6 +3,7 @@ import AppNavbar from './components/AppNavbar.vue'
 import HeroSection from './components/HeroSection.vue'
 import OpportunityList from './components/OpportunityList.vue'
 import VolunteerForm from './components/VolunteerForm.vue'
+import { opportunities } from './data/opportunities.js'
 </script>
 
 <template>
@@ -10,7 +11,7 @@ import VolunteerForm from './components/VolunteerForm.vue'
 
   <main>
     <HeroSection />
-    <OpportunityList />
+    <OpportunityList :opportunities="opportunities" />
     <VolunteerForm />
   </main>
 </template>
