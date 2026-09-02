@@ -27,12 +27,24 @@
 .hero {
   width: 100%;
   padding: 5rem 1rem;
+  background-color: #eefaf7;
+  background-image: url('../assets/images/greenlink-hero-bg.png');
+  background-position: center right;
+  background-repeat: no-repeat;
+  background-size: cover;
 }
 
 .hero__content {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 44rem;
+  margin: 0 auto 0 0;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1rem 2.5rem rgba(23, 61, 36, 0.1);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .hero__eyebrow {
@@ -95,6 +107,12 @@
 @media (max-width: 575px) {
   .hero {
     padding-block: 3.5rem;
+    background-position: center center;
+  }
+
+  .hero__content {
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.8);
   }
 
   .hero__actions {
