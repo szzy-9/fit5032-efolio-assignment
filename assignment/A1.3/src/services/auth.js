@@ -4,8 +4,9 @@ const USERS_KEY = 'greenlink.users'
 const SESSION_KEY = 'greenlink.currentUser'
 const PBKDF2_ITERATIONS = 600000
 const DEMO_ADMIN_EMAIL = 'admin@example.com'
-// Public credentials for the local assignment demo only.
-const DEMO_ADMIN_PASSWORD = 'Admin123!'
+// Precomputed using PBKDF2-SHA-256, 600000 iterations and a 16-byte salt.
+const DEMO_ADMIN_PASSWORD_HASH = '6d607295a008e130bb95e075202e2e216d6a0c949c71071f6355df162bec9336'
+const DEMO_ADMIN_SALT = 'd8797d427a0e9c8f455a0680abe50da9'
 
 export class AuthError extends Error {
   constructor(message, field) {
@@ -191,23 +192,16 @@ function requireUniqueEmail(users, email) {
 }
 
 export async function initializeDemoAdmin() {
-  const existingUsers = readUsers()
-  if (existingUsers.some((user) => user.role === 'admin')) return
-  requireDemoEmailAvailable(existingUsers)
-  requireWebCrypto()
-  const salt = toHex(crypto.getRandomValues(new Uint8Array(16)))
-  const passwordHash = await hashPassword(DEMO_ADMIN_PASSWORD, salt)
-
-  // Hashing is asynchronous: preserve any accounts added while it was running.
   const users = readUsers()
   if (users.some((user) => user.role === 'admin')) return
   requireDemoEmailAvailable(users)
+  requireWebCrypto()
   const admin = {
     id: crypto.randomUUID(),
     name: 'Admin',
     email: DEMO_ADMIN_EMAIL,
-    passwordHash,
-    salt,
+    passwordHash: DEMO_ADMIN_PASSWORD_HASH,
+    salt: DEMO_ADMIN_SALT,
     role: 'admin',
   }
   try {

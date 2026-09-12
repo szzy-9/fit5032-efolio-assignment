@@ -142,8 +142,14 @@ test('rendered name, email, comment and search controls expose their length limi
       assert.ok(tag?.includes(`maxlength="${limit}"`), `Missing length limit for ${id}`)
     }
   }
-  await auth.initializeDemoAdmin()
-  await auth.login({ email: 'admin@example.com', password: 'Admin123!' })
+  const details = {
+    name: 'Test User',
+    email: 'security-test@example.com',
+    password: 'GreenLink1',
+    confirmPassword: 'GreenLink1',
+  }
+  await auth.registerUser(details)
+  await auth.login(details)
   const html = await renderToString(createSSRApp(ReviewsView).use(router))
   assert.match(html, /<textarea\b[^>]*maxlength="300"/)
   assert.match(html, /Up to 300 characters/)

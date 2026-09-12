@@ -84,10 +84,13 @@ test('a user review stores the required fields with identity from the authentica
 test('user and admin ratings aggregate to 4.5 and updating a review keeps the count at two', async () => {
   const reviews = await loadReviews()
   await auth.registerUser(may)
-  await auth.initializeDemoAdmin()
+  await auth.registerUser({ ...may, name: 'Test Admin', email: 'test-admin@example.com' })
+  const accounts = JSON.parse(localStorage.getItem('greenlink.users'))
+  accounts.find((account) => account.email === 'test-admin@example.com').role = 'admin'
+  localStorage.setItem('greenlink.users', JSON.stringify(accounts))
   await auth.login(may)
   const first = reviews.saveReview({ rating: 5, comment: 'Very useful.' })
-  await auth.login({ email: 'admin@example.com', password: 'Admin123!' })
+  await auth.login({ email: 'test-admin@example.com', password: may.password })
   const adminReview = reviews.saveReview({ rating: 4, comment: 'Clear information.' })
   assert.deepEqual(reviews.getRatingSummary(reviews.getReviews()), { average: 4.5, count: 2 })
 

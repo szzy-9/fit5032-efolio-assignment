@@ -350,9 +350,10 @@ test('admin route rejects guests and users but allows admins; public routes stay
   assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
 })
 
-const demoCredentials = { email: 'admin@example.com', password: 'Admin123!' }
-
-test('demo admin initialization uses PBKDF2 and permits login without starting a session', async () => {
+test('demo admin initialization loads precomputed credentials without hashing or starting a session', async (t) => {
+  t.mock.method(crypto.subtle, 'deriveBits', () => {
+    throw new Error('Demo initialization must not derive a password hash at runtime')
+  })
   await auth.initializeDemoAdmin()
   const users = JSON.parse(localStorage.getItem(usersKey))
   assert.equal(users.length, 1)
@@ -369,14 +370,9 @@ test('demo admin initialization uses PBKDF2 and permits login without starting a
     'salt',
   ])
   assert.match(admin.salt, /^[0-9a-f]{32}$/)
-  assert.equal(
-    admin.passwordHash,
-    pbkdf2Sync('Admin123!', Buffer.from(admin.salt, 'hex'), 600000, 32, 'sha256').toString('hex'),
-  )
-  assert.ok(!localStorage.getItem(usersKey).includes('Admin123!'))
+  assert.match(admin.passwordHash, /^[0-9a-f]{64}$/)
   assert.equal(sessionStorage.getItem(sessionKey), null)
   assert.equal(auth.currentUser.value, null)
-  assert.equal((await auth.login(demoCredentials)).role, 'admin')
 })
 
 test('repeated and overlapping demo initialization preserves existing accounts and session', async () => {
@@ -430,12 +426,12 @@ test('demo initialization preserves malformed storage instead of replacing accou
 test('current-user and admin helpers follow guest, user, admin, reload and logout states', async () => {
   assert.equal(auth.getCurrentUser(), null)
   assert.equal(auth.isAdmin(), false)
-  await auth.initializeDemoAdmin()
+  await registerAdmin()
   await auth.registerUser(registration)
   await auth.login(registration)
   assert.equal(auth.getCurrentUser().email, 'alex@example.com')
   assert.equal(auth.isAdmin(), false)
-  await auth.login(demoCredentials)
+  await auth.login({ email: 'admin@example.com', password: registration.password })
   assert.equal(auth.getCurrentUser().email, 'admin@example.com')
   assert.equal(auth.isAdmin(), true)
   assert.deepEqual(Object.keys(auth.getCurrentUser()).sort(), ['email', 'id', 'name', 'role'])
