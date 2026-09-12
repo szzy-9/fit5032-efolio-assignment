@@ -199,3 +199,105 @@ test('invalid session data does not prevent the application from loading', async
     assert.equal(reloaded.currentUser.value, null)
   }
 })
+
+async function registerAdmin() {
+  await auth.registerUser({ ...registration, name: 'Admin', email: 'admin@example.com' })
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  users.find((user) => user.email === 'admin@example.com').role = 'admin'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+}
+
+test('guests and ordinary users cannot read the registered user list', async () => {
+  assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+  await auth.registerUser(registration)
+  await auth.login(registration)
+  assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+})
+
+test('admins can list all registered users without password hashes or salts', async () => {
+  await auth.registerUser(registration)
+  await registerAdmin()
+  const admin = await auth.login({ email: 'admin@example.com', password: registration.password })
+  assert.equal(admin.role, 'admin')
+  const users = auth.getRegisteredUsers()
+  assert.equal(users.length, 2)
+  assert.deepEqual(
+    users.map(({ name, email, role }) => ({ name, email, role })),
+    [
+      { name: 'Alex Green', email: 'alex@example.com', role: 'user' },
+      { name: 'Admin', email: 'admin@example.com', role: 'admin' },
+    ],
+  )
+  for (const user of users) {
+    assert.deepEqual(Object.keys(user).sort(), ['email', 'id', 'name', 'role'])
+  }
+  auth.logout()
+  assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+})
+
+test('changing only the session role cannot turn a registered user into an admin', async () => {
+  await auth.registerUser(registration)
+  const user = await auth.login(registration)
+  sessionStorage.setItem(sessionKey, JSON.stringify({ ...user, role: 'admin' }))
+  const reloaded = await import('../src/services/auth.js?tampered-role')
+  assert.equal(reloaded.currentUser.value.role, 'user')
+  assert.throws(() => reloaded.getRegisteredUsers(), { name: 'AuthError' })
+})
+
+test('deleted accounts and sessions with mismatched emails are not restored', async () => {
+  await auth.registerUser(registration)
+  const user = await auth.login(registration)
+  sessionStorage.setItem(sessionKey, JSON.stringify({ ...user, email: 'someone@example.com' }))
+  const mismatched = await import('../src/services/auth.js?mismatched-email')
+  assert.equal(mismatched.currentUser.value, null)
+  assert.equal(sessionStorage.getItem(sessionKey), null)
+
+  sessionStorage.setItem(sessionKey, JSON.stringify(user))
+  localStorage.setItem(usersKey, '[]')
+  const deleted = await import('../src/services/auth.js?deleted-user')
+  assert.equal(deleted.currentUser.value, null)
+  assert.equal(sessionStorage.getItem(sessionKey), null)
+})
+
+test('admin list access rechecks the account role and session on every call', async () => {
+  await registerAdmin()
+  await auth.login({ email: 'admin@example.com', password: registration.password })
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  users[0].role = 'user'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+  assert.equal(auth.currentUser.value.role, 'user')
+
+  users[0].role = 'admin'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  sessionStorage.removeItem(sessionKey)
+  assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+  assert.equal(auth.currentUser.value, null)
+})
+
+test('unknown account roles fail closed', async () => {
+  await auth.registerUser(registration)
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  users[0].role = 'superadmin'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  await assert.rejects(auth.login(registration), { name: 'AuthError' })
+  assert.equal(auth.currentUser.value, null)
+})
+
+test('admin route rejects guests and users but allows admins; public routes stay available', async () => {
+  const { guardRoute } = await import('../src/router/guards.js')
+  const adminRoute = { meta: { requiresAuth: true, role: 'admin' } }
+  assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
+  assert.equal(guardRoute({ meta: {} }), true)
+
+  await auth.registerUser(registration)
+  await auth.login(registration)
+  assert.deepEqual(guardRoute(adminRoute), { name: 'home' })
+  assert.equal(guardRoute({ meta: {} }), true)
+
+  await registerAdmin()
+  await auth.login({ email: 'admin@example.com', password: registration.password })
+  assert.equal(guardRoute(adminRoute), true)
+  auth.logout()
+  assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
+})

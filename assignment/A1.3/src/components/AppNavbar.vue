@@ -29,6 +29,9 @@ async function handleLogout() {
         <RouterLink :to="{ name: 'home', hash: '#home' }">Home</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#opportunities' }">Opportunities</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#volunteer' }">Volunteer</RouterLink>
+        <RouterLink v-if="currentUser?.role === 'admin'" :to="{ name: 'admin' }">
+          Admin Dashboard
+        </RouterLink>
         <template v-if="currentUser">
           <span class="navbar__account">Hi, {{ firstName }}</span>
           <button class="navbar__logout" type="button" @click="handleLogout">Logout</button>

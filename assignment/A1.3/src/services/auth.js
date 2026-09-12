@@ -54,6 +54,7 @@ function requireValid(errors) {
 function hasSafeFields(user) {
   return (
     user &&
+    ['user', 'admin'].includes(user.role) &&
     ['id', 'name', 'email', 'role'].every(
       (field) => typeof user[field] === 'string' && user[field].trim(),
     )
@@ -98,7 +99,15 @@ function restoreSession() {
       sessionStorage.removeItem(SESSION_KEY)
       return null
     }
-    const session = safeUser(user)
+    // Resolve the role from the account, never from the cached session alone.
+    const account = readUsers().find(
+      (account) => account.id === user.id && account.email === user.email,
+    )
+    if (!account) {
+      sessionStorage.removeItem(SESSION_KEY)
+      return null
+    }
+    const session = safeUser(account)
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
     return session
   } catch {
@@ -108,6 +117,18 @@ function restoreSession() {
 
 const sessionUser = ref(restoreSession())
 export const currentUser = readonly(sessionUser)
+
+export function refreshSession() {
+  sessionUser.value = restoreSession()
+  return sessionUser.value
+}
+
+export function getRegisteredUsers() {
+  if (refreshSession()?.role !== 'admin') {
+    throw new AuthError('Only administrators can view registered users.')
+  }
+  return readUsers().map(safeUser)
+}
 
 function requireWebCrypto() {
   if (!globalThis.crypto?.subtle) {

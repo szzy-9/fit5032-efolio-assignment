@@ -22,9 +22,9 @@ async function handleSubmit() {
   }
   pending.value = true
   try {
-    await login({ ...form })
+    const user = await login({ ...form })
     form.password = ''
-    await router.push({ name: 'home' })
+    await router.push({ name: user.role === 'admin' ? 'admin' : 'home' })
   } catch (error) {
     loginError.value =
       error instanceof AuthError ? error.message : 'Unable to log in. Please try again.'
