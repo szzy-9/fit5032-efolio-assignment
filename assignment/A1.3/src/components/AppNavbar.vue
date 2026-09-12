@@ -30,6 +30,7 @@ async function handleLogout() {
         <RouterLink :to="{ name: 'home', hash: '#home' }">Home</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#opportunities' }">Opportunities</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#volunteer' }">Volunteer</RouterLink>
+        <RouterLink :to="{ name: 'reviews' }">Reviews</RouterLink>
         <RouterLink v-if="showAdminDashboard" :to="{ name: 'admin' }"> Admin Dashboard </RouterLink>
         <template v-if="currentUser">
           <span class="navbar__account">{{ firstName }}</span>
