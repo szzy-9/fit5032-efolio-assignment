@@ -1,11 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { currentUser, logout } from '../services/auth'
+import { currentUser, isAdmin, logout } from '../services/auth'
 
 const router = useRouter()
 const logoutError = ref('')
 const firstName = computed(() => currentUser.value?.name.trim().split(/\s+/)[0])
+const showAdminDashboard = computed(() => isAdmin())
 
 async function handleLogout() {
   logoutError.value = ''
@@ -29,11 +30,9 @@ async function handleLogout() {
         <RouterLink :to="{ name: 'home', hash: '#home' }">Home</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#opportunities' }">Opportunities</RouterLink>
         <RouterLink :to="{ name: 'home', hash: '#volunteer' }">Volunteer</RouterLink>
-        <RouterLink v-if="currentUser?.role === 'admin'" :to="{ name: 'admin' }">
-          Admin Dashboard
-        </RouterLink>
+        <RouterLink v-if="showAdminDashboard" :to="{ name: 'admin' }"> Admin Dashboard </RouterLink>
         <template v-if="currentUser">
-          <span class="navbar__account">Hi, {{ firstName }}</span>
+          <span class="navbar__account">{{ firstName }}</span>
           <button class="navbar__logout" type="button" @click="handleLogout">Logout</button>
         </template>
         <template v-else>

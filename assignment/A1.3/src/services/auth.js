@@ -3,6 +3,9 @@ import { readonly, ref } from 'vue'
 const USERS_KEY = 'greenlink.users'
 const SESSION_KEY = 'greenlink.currentUser'
 const PBKDF2_ITERATIONS = 600000
+const DEMO_ADMIN_EMAIL = 'admin@example.com'
+// Public credentials for the local assignment demo only.
+const DEMO_ADMIN_PASSWORD = 'Admin123!'
 
 export class AuthError extends Error {
   constructor(message, field) {
@@ -118,13 +121,22 @@ function restoreSession() {
 const sessionUser = ref(restoreSession())
 export const currentUser = readonly(sessionUser)
 
+export function getCurrentUser() {
+  return currentUser.value
+}
+
+export function isAdmin() {
+  return getCurrentUser()?.role === 'admin'
+}
+
 export function refreshSession() {
   sessionUser.value = restoreSession()
   return sessionUser.value
 }
 
 export function getRegisteredUsers() {
-  if (refreshSession()?.role !== 'admin') {
+  refreshSession()
+  if (!isAdmin()) {
     throw new AuthError('Only administrators can view registered users.')
   }
   return readUsers().map(safeUser)
@@ -167,6 +179,41 @@ async function hashPassword(password, salt) {
 function requireUniqueEmail(users, email) {
   if (users.some((user) => normalizeEmail(user.email) === email)) {
     throw new AuthError('An account with this email already exists. Please log in.', 'email')
+  }
+}
+
+export async function initializeDemoAdmin() {
+  const existingUsers = readUsers()
+  if (existingUsers.some((user) => user.role === 'admin')) return
+  requireDemoEmailAvailable(existingUsers)
+  requireWebCrypto()
+  const salt = toHex(crypto.getRandomValues(new Uint8Array(16)))
+  const passwordHash = await hashPassword(DEMO_ADMIN_PASSWORD, salt)
+
+  // Hashing is asynchronous: preserve any accounts added while it was running.
+  const users = readUsers()
+  if (users.some((user) => user.role === 'admin')) return
+  requireDemoEmailAvailable(users)
+  const admin = {
+    id: crypto.randomUUID(),
+    name: 'Admin',
+    email: DEMO_ADMIN_EMAIL,
+    passwordHash,
+    salt,
+    role: 'admin',
+  }
+  try {
+    localStorage.setItem(USERS_KEY, JSON.stringify([...users, admin]))
+  } catch {
+    throw new AuthError('Unable to save the demo admin. Please allow browser storage and reload.')
+  }
+}
+
+function requireDemoEmailAvailable(users) {
+  if (users.some((user) => normalizeEmail(user.email) === DEMO_ADMIN_EMAIL)) {
+    throw new AuthError(
+      'Unable to create the demo admin: admin@example.com already belongs to a regular user.',
+    )
   }
 }
 

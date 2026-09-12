@@ -301,3 +301,100 @@ test('admin route rejects guests and users but allows admins; public routes stay
   auth.logout()
   assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
 })
+
+const demoCredentials = { email: 'admin@example.com', password: 'Admin123!' }
+
+test('demo admin initialization uses PBKDF2 and permits login without starting a session', async () => {
+  await auth.initializeDemoAdmin()
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  assert.equal(users.length, 1)
+  const [admin] = users
+  assert.equal(admin.name, 'Admin')
+  assert.equal(admin.email, 'admin@example.com')
+  assert.equal(admin.role, 'admin')
+  assert.deepEqual(Object.keys(admin).sort(), [
+    'email',
+    'id',
+    'name',
+    'passwordHash',
+    'role',
+    'salt',
+  ])
+  assert.match(admin.salt, /^[0-9a-f]{32}$/)
+  assert.equal(
+    admin.passwordHash,
+    pbkdf2Sync('Admin123!', Buffer.from(admin.salt, 'hex'), 600000, 32, 'sha256').toString('hex'),
+  )
+  assert.ok(!localStorage.getItem(usersKey).includes('Admin123!'))
+  assert.equal(sessionStorage.getItem(sessionKey), null)
+  assert.equal(auth.currentUser.value, null)
+  assert.equal((await auth.login(demoCredentials)).role, 'admin')
+})
+
+test('repeated and overlapping demo initialization preserves existing accounts and session', async () => {
+  await auth.registerUser(registration)
+  const user = await auth.login(registration)
+  const original = JSON.parse(localStorage.getItem(usersKey))[0]
+  await Promise.all([auth.initializeDemoAdmin(), auth.initializeDemoAdmin()])
+  const stored = localStorage.getItem(usersKey)
+  await auth.initializeDemoAdmin()
+  assert.equal(localStorage.getItem(usersKey), stored)
+  const users = JSON.parse(stored)
+  assert.equal(users.length, 2)
+  assert.deepEqual(users[0], original)
+  assert.equal(users.filter((account) => account.role === 'admin').length, 1)
+  assert.deepEqual(auth.currentUser.value, user)
+  assert.deepEqual(JSON.parse(sessionStorage.getItem(sessionKey)), user)
+})
+
+test('demo initialization leaves any existing admin and their credentials unchanged', async () => {
+  await registerAdmin()
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  users[0].email = 'existing-admin@example.com'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  const stored = localStorage.getItem(usersKey)
+  await auth.initializeDemoAdmin()
+  assert.equal(localStorage.getItem(usersKey), stored)
+  assert.equal(
+    (await auth.login({ email: 'existing-admin@example.com', password: registration.password }))
+      .role,
+    'admin',
+  )
+})
+
+test('demo initialization never promotes or overwrites a user with the demo email', async () => {
+  await auth.registerUser({ ...registration, email: ' ADMIN@EXAMPLE.COM ', role: 'admin' })
+  const stored = localStorage.getItem(usersKey)
+  await assert.rejects(auth.initializeDemoAdmin(), { name: 'AuthError' })
+  assert.equal(localStorage.getItem(usersKey), stored)
+  assert.equal(
+    (await auth.login({ email: 'admin@example.com', password: registration.password })).role,
+    'user',
+  )
+})
+
+test('demo initialization preserves malformed storage instead of replacing accounts', async () => {
+  localStorage.setItem(usersKey, 'broken json')
+  await assert.rejects(auth.initializeDemoAdmin(), { name: 'AuthError' })
+  assert.equal(localStorage.getItem(usersKey), 'broken json')
+})
+
+test('current-user and admin helpers follow guest, user, admin, reload and logout states', async () => {
+  assert.equal(auth.getCurrentUser(), null)
+  assert.equal(auth.isAdmin(), false)
+  await auth.initializeDemoAdmin()
+  await auth.registerUser(registration)
+  await auth.login(registration)
+  assert.equal(auth.getCurrentUser().email, 'alex@example.com')
+  assert.equal(auth.isAdmin(), false)
+  await auth.login(demoCredentials)
+  assert.equal(auth.getCurrentUser().email, 'admin@example.com')
+  assert.equal(auth.isAdmin(), true)
+  assert.deepEqual(Object.keys(auth.getCurrentUser()).sort(), ['email', 'id', 'name', 'role'])
+  const reloaded = await import('../src/services/auth.js?admin-helpers-reload')
+  assert.equal(reloaded.getCurrentUser().role, 'admin')
+  assert.equal(reloaded.isAdmin(), true)
+  auth.logout()
+  assert.equal(auth.getCurrentUser(), null)
+  assert.equal(auth.isAdmin(), false)
+})
