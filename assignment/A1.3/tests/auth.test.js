@@ -26,11 +26,49 @@ const registration = {
   password: 'GreenLink1',
   confirmPassword: 'GreenLink1',
 }
+const adminRegistration = { ...registration, name: 'Admin', email: 'owner@example.com' }
 
 beforeEach(() => {
   localStorage.clear()
   sessionStorage.clear()
   auth.logout()
+})
+
+test('only the first registered account is an admin and supplied roles are ignored', async () => {
+  const first = await auth.registerUser({ ...adminRegistration, role: 'user' })
+  const second = await auth.registerUser({ ...registration, role: 'admin' })
+  const third = await auth.registerUser({ ...registration, email: 'third@example.com' })
+  assert.equal(first.role, 'admin')
+  assert.equal(second.role, 'user')
+  assert.equal(third.role, 'user')
+  assert.deepEqual(
+    JSON.parse(localStorage.getItem(usersKey)).map((user) => user.role),
+    ['admin', 'user', 'user'],
+  )
+  assert.equal(sessionStorage.getItem(sessionKey), null)
+  assert.equal(auth.currentUser.value, null)
+})
+
+test('overlapping registrations of different accounts create only one admin', async () => {
+  await Promise.all([
+    auth.registerUser(adminRegistration),
+    auth.registerUser(registration),
+    auth.registerUser({ ...registration, email: 'third@example.com', role: 'admin' }),
+  ])
+  assert.deepEqual(
+    JSON.parse(localStorage.getItem(usersKey)).map((user) => user.role),
+    ['admin', 'user', 'user'],
+  )
+})
+
+test('a nonempty account store never grants admin to a later registration even without an existing admin', async () => {
+  await auth.registerUser(registration)
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  users[0].role = 'user'
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  const next = await auth.registerUser({ ...adminRegistration, role: 'admin' })
+  assert.equal(next.role, 'user')
+  assert.deepEqual(JSON.parse(localStorage.getItem(usersKey))[0], users[0])
 })
 
 test('registration reports each required field inline', () => {
@@ -114,7 +152,10 @@ test('password whitespace is preserved when registering and logging in', async (
   const password = ' GreenLink1 '
   await auth.registerUser({ ...registration, password, confirmPassword: password })
   await assert.rejects(auth.login(registration), { name: 'AuthError' })
-  assert.equal((await auth.login({ email: registration.email, password })).role, 'user')
+  assert.equal(
+    (await auth.login({ email: registration.email, password })).email,
+    registration.email,
+  )
 })
 
 test('accounts stored before the email length limit can still log in with their original email', async () => {
@@ -153,7 +194,6 @@ test('multiple users have unique salts and PBKDF2 hashes, with no stored plainte
       'role',
       'salt',
     ])
-    assert.equal(user.role, 'user')
     assert.match(user.salt, /^[0-9a-f]{32}$/)
     // Independently verify the stored hash with Node's PBKDF2 implementation.
     assert.equal(
@@ -220,16 +260,19 @@ test('unknown emails and incorrect passwords get the same generic login error', 
 })
 
 test('session restores after reload, and logout removes only the authentication session', async () => {
+  await auth.registerUser(adminRegistration)
   await auth.registerUser(registration)
-  const user = await auth.login(registration)
-  const reloaded = await import(`../src/services/auth.js?reload=${Date.now()}`)
-  assert.deepEqual(reloaded.currentUser.value, user)
-  sessionStorage.setItem('unrelated', 'keep')
-  reloaded.logout()
-  assert.equal(reloaded.currentUser.value, null)
-  assert.equal(sessionStorage.getItem(sessionKey), null)
-  assert.equal(sessionStorage.getItem('unrelated'), 'keep')
-  assert.equal(JSON.parse(localStorage.getItem(usersKey)).length, 1)
+  for (const details of [adminRegistration, registration]) {
+    const user = await auth.login(details)
+    const reloaded = await import(`../src/services/auth.js?reload=${details.email}`)
+    assert.deepEqual(reloaded.currentUser.value, user)
+    sessionStorage.setItem('unrelated', 'keep')
+    reloaded.logout()
+    assert.equal(reloaded.currentUser.value, null)
+    assert.equal(sessionStorage.getItem(sessionKey), null)
+    assert.equal(sessionStorage.getItem('unrelated'), 'keep')
+    assert.equal(JSON.parse(localStorage.getItem(usersKey)).length, 2)
+  }
 })
 
 test('malformed stored accounts are not silently overwritten', async () => {
@@ -248,32 +291,26 @@ test('invalid session data does not prevent the application from loading', async
   }
 })
 
-async function registerAdmin() {
-  await auth.registerUser({ ...registration, name: 'Admin', email: 'admin@example.com' })
-  const users = JSON.parse(localStorage.getItem(usersKey))
-  users.find((user) => user.email === 'admin@example.com').role = 'admin'
-  localStorage.setItem(usersKey, JSON.stringify(users))
-}
-
 test('guests and ordinary users cannot read the registered user list', async () => {
   assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
+  await auth.registerUser(adminRegistration)
   await auth.registerUser(registration)
   await auth.login(registration)
   assert.throws(() => auth.getRegisteredUsers(), { name: 'AuthError' })
 })
 
 test('admins can list all registered users without password hashes or salts', async () => {
+  await auth.registerUser(adminRegistration)
   await auth.registerUser(registration)
-  await registerAdmin()
-  const admin = await auth.login({ email: 'admin@example.com', password: registration.password })
+  const admin = await auth.login(adminRegistration)
   assert.equal(admin.role, 'admin')
   const users = auth.getRegisteredUsers()
   assert.equal(users.length, 2)
   assert.deepEqual(
     users.map(({ name, email, role }) => ({ name, email, role })),
     [
+      { name: 'Admin', email: 'owner@example.com', role: 'admin' },
       { name: 'Alex Green', email: 'alex@example.com', role: 'user' },
-      { name: 'Admin', email: 'admin@example.com', role: 'admin' },
     ],
   )
   for (const user of users) {
@@ -284,6 +321,7 @@ test('admins can list all registered users without password hashes or salts', as
 })
 
 test('changing only the session role cannot turn a registered user into an admin', async () => {
+  await auth.registerUser(adminRegistration)
   await auth.registerUser(registration)
   const user = await auth.login(registration)
   sessionStorage.setItem(sessionKey, JSON.stringify({ ...user, role: 'admin' }))
@@ -308,8 +346,8 @@ test('deleted accounts and sessions with mismatched emails are not restored', as
 })
 
 test('admin list access rechecks the account role and session on every call', async () => {
-  await registerAdmin()
-  await auth.login({ email: 'admin@example.com', password: registration.password })
+  await auth.registerUser(adminRegistration)
+  await auth.login(adminRegistration)
   const users = JSON.parse(localStorage.getItem(usersKey))
   users[0].role = 'user'
   localStorage.setItem(usersKey, JSON.stringify(users))
@@ -338,101 +376,30 @@ test('admin route rejects guests and users but allows admins; public routes stay
   assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
   assert.equal(guardRoute({ meta: {} }), true)
 
+  await auth.registerUser(adminRegistration)
+  await auth.login(adminRegistration)
+  assert.equal(guardRoute(adminRoute), true)
+  assert.equal(guardRoute({ meta: {} }), true)
+
   await auth.registerUser(registration)
   await auth.login(registration)
   assert.deepEqual(guardRoute(adminRoute), { name: 'home' })
   assert.equal(guardRoute({ meta: {} }), true)
 
-  await registerAdmin()
-  await auth.login({ email: 'admin@example.com', password: registration.password })
-  assert.equal(guardRoute(adminRoute), true)
   auth.logout()
   assert.deepEqual(guardRoute(adminRoute), { name: 'login' })
-})
-
-test('demo admin initialization loads precomputed credentials without hashing or starting a session', async (t) => {
-  t.mock.method(crypto.subtle, 'deriveBits', () => {
-    throw new Error('Demo initialization must not derive a password hash at runtime')
-  })
-  await auth.initializeDemoAdmin()
-  const users = JSON.parse(localStorage.getItem(usersKey))
-  assert.equal(users.length, 1)
-  const [admin] = users
-  assert.equal(admin.name, 'Admin')
-  assert.equal(admin.email, 'admin@example.com')
-  assert.equal(admin.role, 'admin')
-  assert.deepEqual(Object.keys(admin).sort(), [
-    'email',
-    'id',
-    'name',
-    'passwordHash',
-    'role',
-    'salt',
-  ])
-  assert.match(admin.salt, /^[0-9a-f]{32}$/)
-  assert.match(admin.passwordHash, /^[0-9a-f]{64}$/)
-  assert.equal(sessionStorage.getItem(sessionKey), null)
-  assert.equal(auth.currentUser.value, null)
-})
-
-test('repeated and overlapping demo initialization preserves existing accounts and session', async () => {
-  await auth.registerUser(registration)
-  const user = await auth.login(registration)
-  const original = JSON.parse(localStorage.getItem(usersKey))[0]
-  await Promise.all([auth.initializeDemoAdmin(), auth.initializeDemoAdmin()])
-  const stored = localStorage.getItem(usersKey)
-  await auth.initializeDemoAdmin()
-  assert.equal(localStorage.getItem(usersKey), stored)
-  const users = JSON.parse(stored)
-  assert.equal(users.length, 2)
-  assert.deepEqual(users[0], original)
-  assert.equal(users.filter((account) => account.role === 'admin').length, 1)
-  assert.deepEqual(auth.currentUser.value, user)
-  assert.deepEqual(JSON.parse(sessionStorage.getItem(sessionKey)), user)
-})
-
-test('demo initialization leaves any existing admin and their credentials unchanged', async () => {
-  await registerAdmin()
-  const users = JSON.parse(localStorage.getItem(usersKey))
-  users[0].email = 'existing-admin@example.com'
-  localStorage.setItem(usersKey, JSON.stringify(users))
-  const stored = localStorage.getItem(usersKey)
-  await auth.initializeDemoAdmin()
-  assert.equal(localStorage.getItem(usersKey), stored)
-  assert.equal(
-    (await auth.login({ email: 'existing-admin@example.com', password: registration.password }))
-      .role,
-    'admin',
-  )
-})
-
-test('demo initialization never promotes or overwrites a user with the demo email', async () => {
-  await auth.registerUser({ ...registration, email: ' ADMIN@EXAMPLE.COM ', role: 'admin' })
-  const stored = localStorage.getItem(usersKey)
-  await assert.rejects(auth.initializeDemoAdmin(), { name: 'AuthError' })
-  assert.equal(localStorage.getItem(usersKey), stored)
-  assert.equal(
-    (await auth.login({ email: 'admin@example.com', password: registration.password })).role,
-    'user',
-  )
-})
-
-test('demo initialization preserves malformed storage instead of replacing accounts', async () => {
-  localStorage.setItem(usersKey, 'broken json')
-  await assert.rejects(auth.initializeDemoAdmin(), { name: 'AuthError' })
-  assert.equal(localStorage.getItem(usersKey), 'broken json')
 })
 
 test('current-user and admin helpers follow guest, user, admin, reload and logout states', async () => {
   assert.equal(auth.getCurrentUser(), null)
   assert.equal(auth.isAdmin(), false)
-  await registerAdmin()
+  await auth.registerUser(adminRegistration)
   await auth.registerUser(registration)
   await auth.login(registration)
   assert.equal(auth.getCurrentUser().email, 'alex@example.com')
   assert.equal(auth.isAdmin(), false)
-  await auth.login({ email: 'admin@example.com', password: registration.password })
-  assert.equal(auth.getCurrentUser().email, 'admin@example.com')
+  await auth.login(adminRegistration)
+  assert.equal(auth.getCurrentUser().email, 'owner@example.com')
   assert.equal(auth.isAdmin(), true)
   assert.deepEqual(Object.keys(auth.getCurrentUser()).sort(), ['email', 'id', 'name', 'role'])
   const reloaded = await import('../src/services/auth.js?admin-helpers-reload')

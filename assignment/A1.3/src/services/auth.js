@@ -3,10 +3,6 @@ import { readonly, ref } from 'vue'
 const USERS_KEY = 'greenlink.users'
 const SESSION_KEY = 'greenlink.currentUser'
 const PBKDF2_ITERATIONS = 600000
-const DEMO_ADMIN_EMAIL = 'admin@example.com'
-// Precomputed using PBKDF2-SHA-256, 600000 iterations and a 16-byte salt.
-const DEMO_ADMIN_PASSWORD_HASH = '6d607295a008e130bb95e075202e2e216d6a0c949c71071f6355df162bec9336'
-const DEMO_ADMIN_SALT = 'd8797d427a0e9c8f455a0680abe50da9'
 
 export class AuthError extends Error {
   constructor(message, field) {
@@ -191,34 +187,6 @@ function requireUniqueEmail(users, email) {
   }
 }
 
-export async function initializeDemoAdmin() {
-  const users = readUsers()
-  if (users.some((user) => user.role === 'admin')) return
-  requireDemoEmailAvailable(users)
-  requireWebCrypto()
-  const admin = {
-    id: crypto.randomUUID(),
-    name: 'Admin',
-    email: DEMO_ADMIN_EMAIL,
-    passwordHash: DEMO_ADMIN_PASSWORD_HASH,
-    salt: DEMO_ADMIN_SALT,
-    role: 'admin',
-  }
-  try {
-    localStorage.setItem(USERS_KEY, JSON.stringify([...users, admin]))
-  } catch {
-    throw new AuthError('Unable to save the demo admin. Please allow browser storage and reload.')
-  }
-}
-
-function requireDemoEmailAvailable(users) {
-  if (users.some((user) => normalizeEmail(user.email) === DEMO_ADMIN_EMAIL)) {
-    throw new AuthError(
-      'Unable to create the demo admin: admin@example.com already belongs to a regular user.',
-    )
-  }
-}
-
 export async function registerUser(details) {
   requireValid(validateRegistration(details))
   const email = normalizeEmail(details.email)
@@ -236,7 +204,7 @@ export async function registerUser(details) {
     email,
     passwordHash,
     salt,
-    role: 'user',
+    role: users.length === 0 ? 'admin' : 'user',
   }
   try {
     localStorage.setItem(USERS_KEY, JSON.stringify([...users, user]))
