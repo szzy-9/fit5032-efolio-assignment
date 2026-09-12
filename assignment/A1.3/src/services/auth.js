@@ -21,19 +21,27 @@ function normalizeEmail(email) {
 
 export function validateLogin({ email, password }) {
   const errors = {}
-  if (!email.trim()) {
+  if (typeof email !== 'string' || !email.trim()) {
     errors.email = 'Email is required.'
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     errors.email = 'Please enter a valid email address.'
   }
-  if (!password) errors.password = 'Password is required.'
+  if (typeof password !== 'string' || !password) errors.password = 'Password is required.'
   return errors
 }
 
 export function validateRegistration({ name, email, password, confirmPassword }) {
   const errors = validateLogin({ email, password })
-  if (!name.trim()) errors.name = 'Full name is required.'
-  if (password) {
+  // Apply new account limits at registration so existing credentials remain usable.
+  if (typeof email === 'string' && email.trim().length > 254) {
+    errors.email = 'Email must be 254 characters or fewer.'
+  }
+  if (typeof name !== 'string' || !name.trim()) {
+    errors.name = 'Full name is required.'
+  } else if (name.trim().length > 80) {
+    errors.name = 'Full name must be 80 characters or fewer.'
+  }
+  if (typeof password === 'string' && password) {
     const missing = []
     if (password.length < 8) missing.push('at least 8 characters')
     if (!/[A-Z]/.test(password)) missing.push('an uppercase letter')
@@ -41,7 +49,7 @@ export function validateRegistration({ name, email, password, confirmPassword })
     if (!/[0-9]/.test(password)) missing.push('a number')
     if (missing.length) errors.password = `Password must contain ${missing.join(', ')}.`
   }
-  if (!confirmPassword) {
+  if (typeof confirmPassword !== 'string' || !confirmPassword) {
     errors.confirmPassword = 'Please confirm your password.'
   } else if (confirmPassword !== password) {
     errors.confirmPassword = 'Passwords must match.'

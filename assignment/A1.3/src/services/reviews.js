@@ -15,8 +15,8 @@ export function validateReview({ rating, comment = '' }) {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     errors.rating = 'Please select a rating from 1 to 5 stars.'
   }
-  if (typeof comment !== 'string' || comment.length > 1000) {
-    errors.comment = 'Please keep your comment within 1000 characters.'
+  if (typeof comment !== 'string' || comment.trim().length > 300) {
+    errors.comment = 'Please keep your comment within 300 characters.'
   }
   return errors
 }
@@ -28,8 +28,12 @@ function isStoredReview(review) {
       (field) => typeof review[field] === 'string' && review[field].trim(),
     ) &&
     typeof review.comment === 'string' &&
+    // Previously accepted comments remain readable; all new submissions use the 300 limit.
+    review.comment.length <= 1000 &&
     Number.isFinite(Date.parse(review.createdAt)) &&
-    Object.keys(validateReview(review)).length === 0
+    Number.isInteger(review.rating) &&
+    review.rating >= 1 &&
+    review.rating <= 5
   )
 }
 

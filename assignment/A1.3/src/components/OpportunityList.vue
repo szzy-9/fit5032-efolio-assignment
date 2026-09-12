@@ -18,7 +18,7 @@ const categoryOptions = computed(() => [
 ])
 
 const filteredOpportunities = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
+  const query = searchQuery.value.trim().slice(0, 100).toLowerCase()
 
   return props.opportunities.filter((opportunity) => {
     const searchableFields = [opportunity.title, opportunity.location, opportunity.category]
@@ -45,6 +45,7 @@ const filteredOpportunities = computed(() => {
             id="opportunity-search"
             v-model="searchQuery"
             type="search"
+            maxlength="100"
             placeholder="Search opportunities..."
           />
         </div>

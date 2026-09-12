@@ -81,6 +81,54 @@ test('invalid registrations never reach storage', async () => {
   assert.equal(localStorage.getItem(usersKey), null)
 })
 
+test('registration trims names and rejects names longer than 80 characters before saving', async () => {
+  for (const name of ['x'.repeat(81), null, 123]) {
+    assert.ok(auth.validateRegistration({ ...registration, name }).name)
+    await assert.rejects(auth.registerUser({ ...registration, name }), {
+      name: 'AuthError',
+      field: 'name',
+    })
+    assert.equal(localStorage.getItem(usersKey), null)
+  }
+  await auth.registerUser({ ...registration, name: `  ${'x'.repeat(80)}  ` })
+  assert.equal(JSON.parse(localStorage.getItem(usersKey))[0].name, 'x'.repeat(80))
+})
+
+test('new registrations limit email length and invalid types fail field validation', async () => {
+  const email = `${'a'.repeat(64)}@${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(58)}.com`
+  assert.equal(email.length, 255)
+  for (const invalid of [email, null, 123]) {
+    assert.ok(auth.validateRegistration({ ...registration, email: invalid }).email)
+    await assert.rejects(auth.registerUser({ ...registration, email: invalid }), {
+      name: 'AuthError',
+      field: 'email',
+    })
+  }
+  const validEmail = email.replace('dddd', 'ddd')
+  assert.equal(validEmail.length, 254)
+  assert.deepEqual(auth.validateRegistration({ ...registration, email: validEmail }), {})
+  assert.equal(localStorage.getItem(usersKey), null)
+})
+
+test('password whitespace is preserved when registering and logging in', async () => {
+  const password = ' GreenLink1 '
+  await auth.registerUser({ ...registration, password, confirmPassword: password })
+  await assert.rejects(auth.login(registration), { name: 'AuthError' })
+  assert.equal((await auth.login({ email: registration.email, password })).role, 'user')
+})
+
+test('accounts stored before the email length limit can still log in with their original email', async () => {
+  await auth.registerUser(registration)
+  const users = JSON.parse(localStorage.getItem(usersKey))
+  const legacyEmail = `${'a'.repeat(243)}@example.com`
+  assert.equal(legacyEmail.length, 255)
+  users[0].email = legacyEmail
+  localStorage.setItem(usersKey, JSON.stringify(users))
+  const user = await auth.login({ email: legacyEmail, password: registration.password })
+  assert.equal(user.email, legacyEmail)
+  assert.deepEqual(JSON.parse(localStorage.getItem(usersKey)), users)
+})
+
 test('multiple users have unique salts and PBKDF2 hashes, with no stored plaintext', async () => {
   await auth.registerUser({ ...registration, name: ' Alex Green ', email: ' ALEX@EXAMPLE.COM ' })
   await auth.registerUser({

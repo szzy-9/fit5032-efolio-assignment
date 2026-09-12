@@ -26,5 +26,21 @@ export default defineConfig([
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
+  {
+    name: 'app/safe-text-rendering',
+    rules: {
+      'vue/no-v-html': 'error',
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'innerHTML',
+          message: 'Render user input with Vue text interpolation or textContent.',
+        },
+      ],
+    },
+  },
+
   skipFormatting,
 ])

@@ -135,15 +135,18 @@ test('only whole-number ratings from one to five can be saved', async () => {
   assert.equal(reviews.getReviews().length, 1)
 })
 
-test('comments are optional text of at most 1000 characters', async () => {
+test('comments are trimmed optional text of at most 300 characters', async () => {
   const reviews = await loadReviews()
   await auth.registerUser(may)
   await auth.login(may)
   assert.equal(reviews.saveReview({ rating: 4 }).comment, '')
   assert.equal(reviews.saveReview({ rating: 4, comment: ' ' }).comment, '')
-  assert.equal(reviews.saveReview({ rating: 4, comment: 'x'.repeat(1000) }).comment.length, 1000)
+  assert.equal(
+    reviews.saveReview({ rating: 4, comment: `  ${'x'.repeat(300)}  ` }).comment.length,
+    300,
+  )
   const stored = localStorage.getItem(reviewsKey)
-  for (const comment of [null, {}, 'x'.repeat(1001)]) {
+  for (const comment of [null, {}, 'x'.repeat(301)]) {
     assert.ok(reviews.validateReview({ rating: 4, comment }).comment)
     assert.throws(() => reviews.saveReview({ rating: 4, comment }), {
       name: 'ReviewError',
@@ -151,6 +154,23 @@ test('comments are optional text of at most 1000 characters', async () => {
     })
     assert.equal(localStorage.getItem(reviewsKey), stored)
   }
+})
+
+test('older long reviews stay readable and can be shortened without losing other reviews', async () => {
+  const reviews = await loadReviews()
+  await auth.registerUser(may)
+  await auth.login(may)
+  const original = reviews.saveReview({ rating: 4, comment: 'Original.' })
+  const legacy = { ...original, comment: 'x'.repeat(1000) }
+  localStorage.setItem(reviewsKey, JSON.stringify([legacy]))
+  assert.deepEqual(reviews.getReviews(), [legacy])
+  assert.throws(() => reviews.saveReview({ rating: 4, comment: legacy.comment }), {
+    name: 'ReviewError',
+    field: 'comment',
+  })
+  assert.deepEqual(reviews.getReviews(), [legacy])
+  reviews.saveReview({ rating: 5, comment: '  Shorter review.  ' })
+  assert.deepEqual(reviews.getReviews(), [{ ...original, rating: 5, comment: 'Shorter review.' }])
 })
 
 test('submission rechecks the session and rejects a deleted account', async () => {

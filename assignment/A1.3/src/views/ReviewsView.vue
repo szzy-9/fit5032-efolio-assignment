@@ -130,11 +130,11 @@ loadReviews()
                 v-model="form.comment"
                 name="comment"
                 rows="4"
-                maxlength="1000"
+                maxlength="300"
                 :aria-invalid="Boolean(errors.comment)"
                 :aria-describedby="errors.comment ? 'comment-hint comment-error' : 'comment-hint'"
               ></textarea>
-              <p id="comment-hint" class="reviews-hint">Up to 1000 characters.</p>
+              <p id="comment-hint" class="reviews-hint">Up to 300 characters.</p>
               <p v-if="errors.comment" id="comment-error" class="reviews-error">
                 {{ errors.comment }}
               </p>

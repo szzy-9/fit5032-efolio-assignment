@@ -86,6 +86,7 @@ async function handleSubmit() {
               v-model="form.name"
               name="name"
               type="text"
+              maxlength="80"
               autocomplete="name"
               required
               :aria-invalid="Boolean(errors.name)"
@@ -101,6 +102,7 @@ async function handleSubmit() {
               v-model="form.email"
               name="email"
               type="email"
+              maxlength="254"
               autocomplete="username"
               required
               :aria-invalid="Boolean(errors.email)"

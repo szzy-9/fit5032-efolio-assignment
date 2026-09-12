@@ -12,6 +12,7 @@ const form = reactive({
 const errors = reactive({
   fullName: '',
   email: '',
+  suburb: '',
   postcode: '',
   preferredActivity: '',
 })
@@ -21,17 +22,26 @@ const submissionSuccess = ref(false)
 function validateForm() {
   errors.fullName = ''
   errors.email = ''
+  errors.suburb = ''
   errors.postcode = ''
   errors.preferredActivity = ''
 
   if (!form.fullName.trim()) {
     errors.fullName = 'Full name is required.'
+  } else if (form.fullName.trim().length > 80) {
+    errors.fullName = 'Full name must be 80 characters or fewer.'
   }
 
   if (!form.email.trim()) {
     errors.email = 'Email is required.'
+  } else if (form.email.trim().length > 254) {
+    errors.email = 'Email must be 254 characters or fewer.'
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
     errors.email = 'Please enter a valid email address.'
+  }
+
+  if (form.suburb.trim().length > 80) {
+    errors.suburb = 'Suburb must be 80 characters or fewer.'
   }
 
   if (!/^\d{4}$/.test(form.postcode.trim())) {
@@ -42,13 +52,17 @@ function validateForm() {
     errors.preferredActivity = 'Please select an activity.'
   }
 
-  return !errors.fullName && !errors.email && !errors.postcode && !errors.preferredActivity
+  return Object.values(errors).every((error) => !error)
 }
 
 function handleSubmit() {
   submissionSuccess.value = false
 
   if (validateForm()) {
+    form.fullName = form.fullName.trim()
+    form.email = form.email.trim().toLowerCase()
+    form.suburb = form.suburb.trim()
+    form.postcode = form.postcode.trim()
     submissionSuccess.value = true
   }
 }
@@ -67,6 +81,7 @@ function handleSubmit() {
             v-model="form.fullName"
             name="fullName"
             type="text"
+            maxlength="80"
             autocomplete="name"
             :aria-invalid="Boolean(errors.fullName)"
             :aria-describedby="errors.fullName ? 'full-name-error' : undefined"
@@ -83,6 +98,7 @@ function handleSubmit() {
             v-model="form.email"
             name="email"
             type="email"
+            maxlength="254"
             autocomplete="email"
             :aria-invalid="Boolean(errors.email)"
             :aria-describedby="errors.email ? 'email-error' : undefined"
@@ -99,8 +115,14 @@ function handleSubmit() {
             v-model="form.suburb"
             name="suburb"
             type="text"
+            maxlength="80"
             autocomplete="address-level2"
+            :aria-invalid="Boolean(errors.suburb)"
+            :aria-describedby="errors.suburb ? 'suburb-error' : undefined"
           />
+          <p v-if="errors.suburb" id="suburb-error" class="volunteer-form__error">
+            {{ errors.suburb }}
+          </p>
         </div>
 
         <div class="volunteer-form__field">
@@ -128,9 +150,7 @@ function handleSubmit() {
             v-model="form.preferredActivity"
             name="preferredActivity"
             :aria-invalid="Boolean(errors.preferredActivity)"
-            :aria-describedby="
-              errors.preferredActivity ? 'preferred-activity-error' : undefined
-            "
+            :aria-describedby="errors.preferredActivity ? 'preferred-activity-error' : undefined"
           >
             <option value="" disabled>Select an activity</option>
             <option value="tree-planting">Tree Planting</option>
