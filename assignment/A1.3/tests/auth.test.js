@@ -25,8 +25,16 @@ const registration = {
   email: 'alex@example.com',
   password: 'GreenLink1',
   confirmPassword: 'GreenLink1',
+  role: 'user',
+  adminCode: '',
 }
-const adminRegistration = { ...registration, name: 'Admin', email: 'owner@example.com' }
+const adminRegistration = {
+  ...registration,
+  name: 'Admin',
+  email: 'owner@example.com',
+  role: 'admin',
+  adminCode: 'GREENLINK-ADMIN-2026',
+}
 
 beforeEach(() => {
   localStorage.clear()
@@ -34,41 +42,105 @@ beforeEach(() => {
   auth.logout()
 })
 
-test('only the first registered account is an admin and supplied roles are ignored', async () => {
-  const first = await auth.registerUser({ ...adminRegistration, role: 'user' })
-  const second = await auth.registerUser({ ...registration, role: 'admin' })
+test('user registrations remain users regardless of account order', async () => {
+  const first = await auth.registerUser(registration)
+  const second = await auth.registerUser({ ...registration, email: 'second@example.com' })
   const third = await auth.registerUser({ ...registration, email: 'third@example.com' })
-  assert.equal(first.role, 'admin')
+  assert.equal(first.role, 'user')
   assert.equal(second.role, 'user')
   assert.equal(third.role, 'user')
   assert.deepEqual(
     JSON.parse(localStorage.getItem(usersKey)).map((user) => user.role),
-    ['admin', 'user', 'user'],
+    ['user', 'user', 'user'],
   )
   assert.equal(sessionStorage.getItem(sessionKey), null)
   assert.equal(auth.currentUser.value, null)
 })
 
-test('overlapping registrations of different accounts create only one admin', async () => {
+test('overlapping registrations preserve each validated account type', async () => {
   await Promise.all([
     auth.registerUser(adminRegistration),
     auth.registerUser(registration),
-    auth.registerUser({ ...registration, email: 'third@example.com', role: 'admin' }),
+    auth.registerUser({ ...adminRegistration, email: 'third@example.com' }),
   ])
   assert.deepEqual(
-    JSON.parse(localStorage.getItem(usersKey)).map((user) => user.role),
-    ['admin', 'user', 'user'],
+    JSON.parse(localStorage.getItem(usersKey))
+      .map((user) => user.role)
+      .sort(),
+    ['admin', 'admin', 'user'],
   )
 })
 
-test('a nonempty account store never grants admin to a later registration even without an existing admin', async () => {
+test('a valid admin code allows admin registration after existing users', async () => {
   await auth.registerUser(registration)
   const users = JSON.parse(localStorage.getItem(usersKey))
-  users[0].role = 'user'
-  localStorage.setItem(usersKey, JSON.stringify(users))
-  const next = await auth.registerUser({ ...adminRegistration, role: 'admin' })
-  assert.equal(next.role, 'user')
+  const next = await auth.registerUser(adminRegistration)
+  assert.equal(next.role, 'admin')
+  assert.equal(JSON.parse(localStorage.getItem(usersKey))[1].role, 'admin')
   assert.deepEqual(JSON.parse(localStorage.getItem(usersKey))[0], users[0])
+})
+
+test('admin registration requires an admin code before writing any account', async () => {
+  for (const adminCode of [undefined, '', '   ', null]) {
+    const details = { ...adminRegistration, adminCode }
+    assert.equal(auth.validateRegistration(details).adminCode, 'Admin code is required.')
+    await assert.rejects(auth.registerUser(details), { name: 'AuthError', field: 'adminCode' })
+    assert.equal(localStorage.getItem(usersKey), null)
+  }
+})
+
+test('incorrect admin codes are rejected with an inline field error', async () => {
+  for (const adminCode of ['incorrect', 'greenlink-admin-2026', ' GREENLINK-ADMIN-2026 ', 123]) {
+    const details = { ...adminRegistration, adminCode }
+    assert.equal(auth.validateRegistration(details).adminCode, 'Invalid admin code.')
+    await assert.rejects(auth.registerUser(details), {
+      name: 'AuthError',
+      field: 'adminCode',
+      message: 'Invalid admin code.',
+    })
+    assert.equal(localStorage.getItem(usersKey), null)
+  }
+})
+
+test('registration rejects missing and unsupported roles even with a valid admin code', async () => {
+  for (const role of [undefined, '', null, 'superadmin', 'Admin', 123]) {
+    const details = { ...adminRegistration, role }
+    assert.ok(auth.validateRegistration(details).role)
+    await assert.rejects(auth.registerUser(details), { name: 'AuthError', field: 'role' })
+    assert.equal(localStorage.getItem(usersKey), null)
+  }
+})
+
+test('an admin code cannot promote a registration with the user role', async () => {
+  for (const [index, adminCode] of ['GREENLINK-ADMIN-2026', 'invalid', null].entries()) {
+    const details = { ...registration, email: `user${index}@example.com`, adminCode }
+    assert.deepEqual(auth.validateRegistration(details), {})
+    assert.equal((await auth.registerUser(details)).role, 'user')
+  }
+})
+
+test('admin codes never appear in stored accounts, sessions or returned users', async () => {
+  const user = await auth.registerUser(adminRegistration)
+  const session = await auth.login(adminRegistration)
+  assert.equal(user.role, 'admin')
+  for (const value of [
+    JSON.stringify(user),
+    JSON.stringify(session),
+    localStorage.getItem(usersKey),
+    sessionStorage.getItem(sessionKey),
+  ]) {
+    assert.ok(!value.includes('adminCode'))
+    assert.ok(!value.includes('GREENLINK-ADMIN-2026'))
+  }
+})
+
+test('changing registration details while hashing cannot bypass role validation', async () => {
+  const details = { ...registration }
+  const pending = auth.registerUser(details)
+  details.role = 'admin'
+  const user = await pending
+  assert.equal(user.role, 'user')
+  assert.equal(JSON.parse(localStorage.getItem(usersKey))[0].role, 'user')
 })
 
 test('registration reports each required field inline', () => {
@@ -78,7 +150,7 @@ test('registration reports each required field inline', () => {
     password: '',
     confirmPassword: '',
   })
-  for (const field of ['name', 'email', 'password', 'confirmPassword']) {
+  for (const field of ['name', 'email', 'password', 'confirmPassword', 'role']) {
     assert.ok(errors[field], `Missing validation for ${field}`)
   }
 })
@@ -177,6 +249,7 @@ test('multiple users have unique salts and PBKDF2 hashes, with no stored plainte
     name: 'Sam Park',
     email: 'sam@example.com',
     role: 'admin',
+    adminCode: adminRegistration.adminCode,
   })
   const users = JSON.parse(localStorage.getItem(usersKey))
   assert.equal(users.length, 2)
@@ -230,17 +303,18 @@ test('overlapping registrations cannot duplicate an email', async () => {
   assert.equal(JSON.parse(localStorage.getItem(usersKey)).length, 1)
 })
 
-test('each registered account can log in and stores only safe session fields', async () => {
+test('users and admins can log in and store only safe session fields', async () => {
   await auth.registerUser(registration)
-  await auth.registerUser({ ...registration, email: 'sam@example.com', name: 'Sam Park' })
-  for (const [email, name] of [
-    [' ALEX@EXAMPLE.COM ', 'Alex Green'],
-    ['sam@example.com', 'Sam Park'],
+  await auth.registerUser(adminRegistration)
+  for (const [email, name, role] of [
+    [' ALEX@EXAMPLE.COM ', 'Alex Green', 'user'],
+    ['owner@example.com', 'Admin', 'admin'],
   ]) {
     const user = await auth.login({ email, password: registration.password })
     const session = JSON.parse(sessionStorage.getItem(sessionKey))
     assert.deepEqual(Object.keys(session).sort(), ['email', 'id', 'name', 'role'])
     assert.equal(session.name, name)
+    assert.equal(session.role, role)
     assert.deepEqual(session, user)
     assert.deepEqual(auth.currentUser.value, user)
     auth.logout()

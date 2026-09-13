@@ -4,7 +4,14 @@ import { RouterLink } from 'vue-router'
 import { AuthError, registerUser, validateRegistration } from '../services/auth'
 
 const formElement = ref(null)
-const form = reactive({ name: '', email: '', password: '', confirmPassword: '' })
+const form = reactive({
+  name: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  role: 'user',
+  adminCode: '',
+})
 const submitted = ref(false)
 const pending = ref(false)
 const success = ref(false)
@@ -41,6 +48,7 @@ async function handleSubmit() {
     await registerUser({ ...form })
     form.password = ''
     form.confirmPassword = ''
+    form.adminCode = ''
     submitted.value = false
     success.value = true
   } catch (error) {
@@ -158,6 +166,40 @@ async function handleSubmit() {
               class="auth-error"
             >
               {{ errors.confirmPassword }}
+            </p>
+          </div>
+
+          <div class="auth-field">
+            <label for="register-role">Account Type</label>
+            <select
+              id="register-role"
+              v-model="form.role"
+              name="role"
+              required
+              :aria-invalid="Boolean(errors.role)"
+              :aria-describedby="errors.role ? 'register-role-error' : undefined"
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+            <p v-if="errors.role" id="register-role-error" class="auth-error">{{ errors.role }}</p>
+          </div>
+
+          <div v-if="form.role === 'admin'" class="auth-field">
+            <label for="register-admin-code">Admin Code</label>
+            <input
+              id="register-admin-code"
+              v-model="form.adminCode"
+              name="adminCode"
+              type="password"
+              maxlength="80"
+              autocomplete="off"
+              required
+              :aria-invalid="Boolean(errors.adminCode)"
+              :aria-describedby="errors.adminCode ? 'register-admin-code-error' : undefined"
+            />
+            <p v-if="errors.adminCode" id="register-admin-code-error" class="auth-error">
+              {{ errors.adminCode }}
             </p>
           </div>
 

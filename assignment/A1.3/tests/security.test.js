@@ -61,10 +61,106 @@ beforeEach(() => {
   auth.logout()
 })
 
+async function renderRegistration(prepare = () => {}) {
+  const RegisterView = (await vite.ssrLoadModule('/src/views/RegisterView.vue')).default
+  let state
+  const html = await renderToString(
+    createSSRApp({
+      ...RegisterView,
+      async setup(props, context) {
+        state = RegisterView.setup(props, context)
+        await prepare(state)
+        return state
+      },
+    }).use(router),
+  )
+  return { html, state }
+}
+
+test('registration defaults to User with a labelled account type control and no admin code input', async () => {
+  const { html, state } = await renderRegistration()
+  assert.equal(state.form.role, 'user')
+  assert.match(html, /<label[^>]*for="register-role"[^>]*>Account Type<\/label>/)
+  assert.match(html, /<select\b[^>]*id="register-role"[^>]*required/)
+  assert.match(html, /<option\b[^>]*value="user"[^>]*selected[^>]*>User<\/option>/)
+  assert.match(html, /<option\b[^>]*value="admin"[^>]*>Admin<\/option>/)
+  assert.ok(!html.includes('register-admin-code'))
+  assert.ok(!html.includes('GREENLINK-ADMIN-2026'))
+})
+
+test('admin selection shows a required password-style code input and its inline validation error', async () => {
+  const { html, state } = await renderRegistration((state) => {
+    state.form.role = 'admin'
+    state.form.adminCode = 'incorrect'
+    state.submitted.value = true
+  })
+  assert.equal(state.errors.value.adminCode, 'Invalid admin code.')
+  assert.match(html, /<label[^>]*for="register-admin-code"[^>]*>Admin Code<\/label>/)
+  const input = html.match(/<input\b[^>]*id="register-admin-code"[^>]*>/)?.[0]
+  assert.ok(input?.includes('type="password"'))
+  assert.ok(input.includes('required'))
+  assert.ok(input.includes('aria-invalid="true"'))
+  assert.ok(input.includes('aria-describedby="register-admin-code-error"'))
+  assert.match(html, /<p\b[^>]*id="register-admin-code-error"[^>]*>\s*Invalid admin code\.\s*<\/p>/)
+  assert.ok(!html.includes('GREENLINK-ADMIN-2026'))
+})
+
+test('the registration form submits the selected role and code and clears secrets on success', async () => {
+  for (const [role, adminCode] of [
+    ['user', 'ignored'],
+    ['admin', 'GREENLINK-ADMIN-2026'],
+  ]) {
+    const { state } = await renderRegistration(async (state) => {
+      Object.assign(state.form, {
+        name: 'Test Account',
+        email: `${role}@example.com`,
+        password: 'GreenLink1',
+        confirmPassword: 'GreenLink1',
+        role,
+        adminCode,
+      })
+      await state.handleSubmit()
+    })
+    assert.equal(state.success.value, true)
+    assert.equal(state.form.password, '')
+    assert.equal(state.form.confirmPassword, '')
+    assert.equal(state.form.adminCode, '')
+    assert.equal(
+      (await auth.login({ email: `${role}@example.com`, password: 'GreenLink1' })).role,
+      role,
+    )
+  }
+})
+
+test('switching back to User ignores an invalid admin code and hides its input and error', async () => {
+  const { html, state } = await renderRegistration((state) => {
+    state.form.role = 'admin'
+    state.form.adminCode = 'incorrect'
+    state.submitted.value = true
+    state.form.role = 'user'
+  })
+  assert.equal(state.errors.value.adminCode, undefined)
+  assert.ok(!html.includes('register-admin-code'))
+  assert.ok(!html.includes('Invalid admin code.'))
+})
+
+test('the hero keeps its card and actions inside an inner layout container', async () => {
+  const HeroSection = (await vite.ssrLoadModule('/src/components/HeroSection.vue')).default
+  const html = await renderToString(createSSRApp(HeroSection))
+  assert.match(
+    html,
+    /<section\b[^>]*class="hero"[^>]*>\s*<div\b[^>]*class="hero__inner"[^>]*>\s*<div\b[^>]*class="hero__content"/,
+  )
+  assert.match(html, /<h1\b[^>]*id="hero-title"/)
+  assert.match(html, /href="#opportunities"[^>]*>\s*Explore Opportunities/)
+  assert.match(html, /href="#volunteer"[^>]*>Get Involved/)
+})
+
 test('review authors and attack strings render as text for members and guests, including in the edit field', async () => {
   const details = {
     name: '<img src=x onerror=alert(1)>',
     email: 'xss-test@example.com',
+    role: 'user',
     password: 'GreenLink1',
     confirmPassword: 'GreenLink1',
   }
@@ -145,6 +241,7 @@ test('rendered name, email, comment and search controls expose their length limi
   const details = {
     name: 'Test User',
     email: 'security-test@example.com',
+    role: 'user',
     password: 'GreenLink1',
     confirmPassword: 'GreenLink1',
   }

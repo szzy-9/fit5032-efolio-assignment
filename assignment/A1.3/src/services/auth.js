@@ -3,6 +3,7 @@ import { readonly, ref } from 'vue'
 const USERS_KEY = 'greenlink.users'
 const SESSION_KEY = 'greenlink.currentUser'
 const PBKDF2_ITERATIONS = 600000
+const ADMIN_CODE = 'GREENLINK-ADMIN-2026'
 
 export class AuthError extends Error {
   constructor(message, field) {
@@ -27,7 +28,7 @@ export function validateLogin({ email, password }) {
   return errors
 }
 
-export function validateRegistration({ name, email, password, confirmPassword }) {
+export function validateRegistration({ name, email, password, confirmPassword, role, adminCode }) {
   const errors = validateLogin({ email, password })
   // Apply new account limits at registration so existing credentials remain usable.
   if (typeof email === 'string' && email.trim().length > 254) {
@@ -50,6 +51,22 @@ export function validateRegistration({ name, email, password, confirmPassword })
     errors.confirmPassword = 'Please confirm your password.'
   } else if (confirmPassword !== password) {
     errors.confirmPassword = 'Passwords must match.'
+  }
+  if (role === undefined || role === null || role === '') {
+    errors.role = 'Account type is required.'
+  } else if (!['user', 'admin'].includes(role)) {
+    errors.role = 'Please select User or Admin.'
+  }
+  if (role === 'admin') {
+    if (
+      adminCode === undefined ||
+      adminCode === null ||
+      (typeof adminCode === 'string' && !adminCode.trim())
+    ) {
+      errors.adminCode = 'Admin code is required.'
+    } else if (adminCode !== ADMIN_CODE) {
+      errors.adminCode = 'Invalid admin code.'
+    }
   }
   return errors
 }
@@ -188,6 +205,8 @@ function requireUniqueEmail(users, email) {
 }
 
 export async function registerUser(details) {
+  // Keep the validated values stable while password hashing is in progress.
+  details = { ...details }
   requireValid(validateRegistration(details))
   const email = normalizeEmail(details.email)
   requireUniqueEmail(readUsers(), email)
@@ -204,7 +223,7 @@ export async function registerUser(details) {
     email,
     passwordHash,
     salt,
-    role: users.length === 0 ? 'admin' : 'user',
+    role: details.role,
   }
   try {
     localStorage.setItem(USERS_KEY, JSON.stringify([...users, user]))

@@ -1,23 +1,25 @@
 <template>
   <section id="home" class="hero" aria-labelledby="hero-title">
-    <div class="hero__content">
-      <p class="hero__eyebrow">Community Urban Greening</p>
+    <div class="hero__inner">
+      <div class="hero__content">
+        <p class="hero__eyebrow">Community Urban Greening</p>
 
-      <h1 id="hero-title" class="hero__title">
-        <span>Discover Melbourne's</span>
-        <span>Urban Nature</span>
-      </h1>
+        <h1 id="hero-title" class="hero__title">
+          <span>Discover Melbourne's</span>
+          <span>Urban Nature</span>
+        </h1>
 
-      <p class="hero__description">
-        Find local greening and biodiversity opportunities and take practical action in your
-        community.
-      </p>
+        <p class="hero__description">
+          Find local greening and biodiversity opportunities and take practical action in your
+          community.
+        </p>
 
-      <div class="hero__actions">
-        <a class="hero__button hero__button--primary" href="#opportunities">
-          Explore Opportunities
-        </a>
-        <a class="hero__button hero__button--secondary" href="#volunteer">Get Involved</a>
+        <div class="hero__actions">
+          <a class="hero__button hero__button--primary" href="#opportunities">
+            Explore Opportunities
+          </a>
+          <a class="hero__button hero__button--secondary" href="#volunteer">Get Involved</a>
+        </div>
       </div>
     </div>
   </section>
@@ -32,6 +34,12 @@
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
+}
+
+.hero__inner {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .hero__content {
@@ -102,6 +110,18 @@
 .hero__button--secondary {
   color: #2f6b3b;
   background: transparent;
+}
+
+@media (min-width: 576px) {
+  .hero {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 992px) {
+  .hero {
+    padding-inline: 2rem;
+  }
 }
 
 @media (max-width: 575px) {

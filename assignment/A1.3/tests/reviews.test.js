@@ -23,6 +23,7 @@ const may = {
   email: 'may@example.com',
   password: 'GreenLink1',
   confirmPassword: 'GreenLink1',
+  role: 'user',
 }
 
 beforeEach(() => {
@@ -87,6 +88,8 @@ test('user and admin ratings aggregate to 4.5 and updating a review keeps the co
     ...may,
     name: 'Test Admin',
     email: 'test-admin@example.com',
+    role: 'admin',
+    adminCode: 'GREENLINK-ADMIN-2026',
   })
   assert.equal(admin.role, 'admin')
   await auth.registerUser(may)
